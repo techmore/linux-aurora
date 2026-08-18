@@ -201,6 +201,20 @@
 		/* Required to get >32-bit DMA via DARTs */
 		dma-ranges = <0 0 0 0 0xffffffff 0xffffc000>;
 
+		cpufreq_e: cpufreq@210e20000 {
+			compatible = "apple,t8132-cluster-cpufreq", "apple,t8112-cluster-cpufreq";
+			reg = <0x2 0x10e20000 0x0 0x1000>;
+			#performance-domain-cells = <0>;
+			status = "disabled";
+		};
+
+		cpufreq_p: cpufreq@211e20000 {
+			compatible = "apple,t8132-cluster-cpufreq", "apple,t8112-cluster-cpufreq";
+			reg = <0x2 0x11e20000 0x0 0x1000>;
+			#performance-domain-cells = <0>;
+			status = "disabled";
+		};
+
 		pmgr: power-management@380700000 {
 			compatible = "apple,t8132-pmgr", "apple,t8103-pmgr", "syscon", "simple-mfd";
 			#address-cells = <1>;
@@ -677,6 +691,58 @@
 						<0 0 0 4 &pcie0_port2 0 0 0 3>;
 				status = "disabled";
 			};
+		};
+	};
+
+	donan_e_opp: opp-table-e {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp01 { opp-hz = /bits/ 64 <900000000>;  opp-level = <1>; };
+		opp02 { opp-hz = /bits/ 64 <1080000000>; opp-level = <2>; };
+		opp03 { opp-hz = /bits/ 64 <1476000000>; opp-level = <3>; };
+		opp04 { opp-hz = /bits/ 64 <1860000000>; opp-level = <4>; };
+		opp05 { opp-hz = /bits/ 64 <2172000000>; opp-level = <5>; };
+		opp06 { opp-hz = /bits/ 64 <2496000000>; opp-level = <6>; };
+		opp07 { opp-hz = /bits/ 64 <2808000000>; opp-level = <7>; };
+		opp08 {
+			opp-hz = /bits/ 64 <2892000000>;
+			opp-level = <8>;
+			turbo-mode;
+		};
+	};
+
+	donan_p_opp: opp-table-p {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp01 { opp-hz = /bits/ 64 <912000000>;  opp-level = <1>; };
+		opp02 { opp-hz = /bits/ 64 <1260000000>; opp-level = <2>; };
+		opp03 { opp-hz = /bits/ 64 <1512000000>; opp-level = <3>; };
+		opp04 { opp-hz = /bits/ 64 <1800000000>; opp-level = <4>; };
+		opp05 { opp-hz = /bits/ 64 <2088000000>; opp-level = <5>; };
+		opp06 { opp-hz = /bits/ 64 <2352000000>; opp-level = <6>; };
+		opp07 { opp-hz = /bits/ 64 <2616000000>; opp-level = <7>; };
+		opp08 { opp-hz = /bits/ 64 <2868000000>; opp-level = <8>; };
+		opp09 { opp-hz = /bits/ 64 <3096000000>; opp-level = <9>; };
+		opp10 { opp-hz = /bits/ 64 <3300000000>; opp-level = <10>; };
+		opp11 { opp-hz = /bits/ 64 <3468000000>; opp-level = <11>; };
+		opp12 { opp-hz = /bits/ 64 <3624000000>; opp-level = <12>; };
+		opp13 { opp-hz = /bits/ 64 <3756000000>; opp-level = <13>; };
+		opp14 { opp-hz = /bits/ 64 <3876000000>; opp-level = <14>; };
+		opp15 { opp-hz = /bits/ 64 <3936000000>; opp-level = <15>; };
+		opp16 { opp-hz = /bits/ 64 <3984000000>; opp-level = <16>; };
+		opp17 { opp-hz = /bits/ 64 <4044000000>; opp-level = <17>; };
+		opp18 { opp-hz = /bits/ 64 <4104000000>; opp-level = <18>; };
+		opp19 {
+			opp-hz = /bits/ 64 <4416000000>;
+			opp-level = <19>;
+			turbo-mode;
+		};
+		opp20 {
+			opp-hz = /bits/ 64 <4464000000>;
+			opp-level = <20>;
+			turbo-mode;
 		};
 	};
 
