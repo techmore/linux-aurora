@@ -52,8 +52,8 @@ const EP_BOOT: u64 = 0xFF;
 
 const MSG_TYPE_SHIFT: u32 = 16;
 const MSG_TYPE_MASK: u64 = 0xFF;
-//const MSG_PARAM_SHIFT: u32 = 24;
-//const MSG_PARAM_MASK: u64 = 0xFF;
+const MSG_PARAM_SHIFT: u32 = 24;
+const MSG_PARAM_MASK: u64 = 0xFF;
 
 const MSG_EP_MASK: u64 = 0xFF;
 const MSG_DATA_SHIFT: u32 = 32;
@@ -257,19 +257,19 @@ impl SepData {
     }
     fn process_discover_msg(&self, msg: Message) {
         let ty = (msg.msg0 >> MSG_TYPE_SHIFT) & MSG_TYPE_MASK;
-        //let data = (msg.msg0 >> MSG_DATA_SHIFT) as u32;
-        //let param = (msg.msg0 >> MSG_PARAM_SHIFT) & MSG_PARAM_MASK;
+        let data = (msg.msg0 >> MSG_DATA_SHIFT) as u32;
+        let param = (msg.msg0 >> MSG_PARAM_SHIFT) & MSG_PARAM_MASK;
         match ty {
             MSG_ADVERTISE_EP => {
-                /*dev_info!(
+                dev_info!(
                     self.dev,
-                    "Got endpoint {:?} at {}",
+                    "Got endpoint {:?} at {}\n",
                     core::str::from_utf8(&data.to_be_bytes()),
                     param
-                );*/
+                );
             }
             _ => {
-                //dev_warn!(self.dev, "Unknown discovery message type: {}", ty);
+                dev_warn!(self.dev, "Unknown discovery message type: {}\n", ty);
             }
         }
     }
@@ -278,7 +278,13 @@ impl SepData {
         match ep {
             EP_BOOT => self.process_boot_msg(msg),
             EP_DISCOVER => self.process_discover_msg(msg),
-            _ => {} // dev_warn!(self.dev, "Message from unknown endpoint: {}", ep),
+            _ => dev_info!(
+                self.dev,
+                "Message from endpoint {:#x}: {:#018x} {:#018x}\n",
+                ep,
+                msg.msg0,
+                msg.msg1
+            ),
         }
     }
     fn remove(&self) {
