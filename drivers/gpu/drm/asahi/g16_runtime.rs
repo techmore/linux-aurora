@@ -784,11 +784,19 @@ impl Bootstrap {
     /// Notifications do not extend the watchdog. Only retirement progress
     /// resets it, so trace traffic cannot keep a stuck command alive.
     pub(crate) fn watchdog_remaining_ms(&self) -> u32 {
-        self.flights
+        let watchdog = self
+            .flights
             .iter()
             .map(|flight| (10000 - flight.started.elapsed().as_millis()).clamp(1, 10000) as u32)
             .min()
-            .unwrap_or(10000)
+            .unwrap_or(10000);
+        // With work outstanding, recheck completion at least this often, so a
+        // late or lost notification costs milliseconds instead of a hang.
+        if self.flights.is_empty() {
+            watchdog
+        } else {
+            watchdog.min(250)
+        }
     }
 }
 

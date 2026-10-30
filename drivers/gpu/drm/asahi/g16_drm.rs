@@ -1043,7 +1043,16 @@ impl WorkItem for Execution {
             let mut engine = this.device.engine.lock();
             let mut runtime = this.device.runtime.lock();
             let result = (|| -> Result<bool> {
-                wake_result?;
+                // No notification within the wait window is not a hang by
+                // itself: a firmware completion notification can be late or
+                // lost. Poll the completion stamps below; retire() keeps its
+                // own 10 s no-progress watchdog and reports a real hang.
+                // (Backport of the safety poll in replacement/210-gpu.)
+                let timed_out = match wake_result {
+                    Err(e) if e == ETIMEDOUT => true,
+                    Err(e) => return Err(e),
+                    Ok(()) => false,
+                };
                 generation?;
                 if this.device.failed.load(Ordering::Acquire) {
                     return Err(EIO);
@@ -1064,6 +1073,16 @@ impl WorkItem for Execution {
                         job.error = Some(error);
                     }
                     progress = true;
+                    if timed_out {
+                        static REPORTED: core::sync::atomic::AtomicU32 =
+                            core::sync::atomic::AtomicU32::new(0);
+                        if REPORTED.fetch_add(1, Ordering::Relaxed) < 64 {
+                            pr_warn!(
+                                "G16: notification wait timed out; polling retired Work {:#x}\n",
+                                id
+                            );
+                        }
+                    }
                 }
                 let mut admitted = 0;
                 loop {

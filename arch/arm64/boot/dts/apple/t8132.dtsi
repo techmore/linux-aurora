@@ -1022,6 +1022,10 @@
 			reg-names = "smc", "sram";
 			mboxes = <&smc_mbox>;
 
+			reboot {
+				compatible = "apple,smc-reboot";
+			};
+
 			smc_gpio: gpio {
 				compatible = "apple,smc-gpio";
 				gpio-controller;
