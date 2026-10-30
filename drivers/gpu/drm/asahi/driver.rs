@@ -67,6 +67,7 @@ const INFO: drm::driver::DriverInfo = drm::driver::DriverInfo {
 /// DRM Driver implementation for `AsahiDriver`.
 #[vtable]
 impl drm::driver::Driver for AsahiDriver {
+    const MODULE: Option<&'static kernel::ThisModule> = Some(&crate::THIS_MODULE);
     /// Our `DeviceData` type, reference-counted
     type Data = AsahiData;
     /// Our `File` type.
