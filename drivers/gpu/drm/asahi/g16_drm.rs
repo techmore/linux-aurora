@@ -135,6 +135,7 @@ pub(crate) struct Data {
 
 #[vtable]
 impl drm::driver::Driver for Driver {
+    const MODULE: Option<&'static kernel::ThisModule> = Some(&crate::THIS_MODULE);
     type Data = Data;
     type File = File;
     type Object = Object;
@@ -1249,7 +1250,15 @@ struct SubmissionJob {
 }
 
 impl sched::JobImpl for SubmissionJob {
-    fn run(job: &mut sched::Job<Self>) -> Result<Option<dma_fence::Fence>> {
+    type TimeoutData = Arc<Execution>;
+    fn timeout_data(&self) -> Self::TimeoutData { self.execution.clone() }
+
+    const MODULE: Option<&'static kernel::ThisModule> = Some(&crate::THIS_MODULE);
+    // Timeout marks the device failed and wakes the worker. The job is not
+    // freed here; its lifetime fence completes after firmware cleanup.
+    const RETAIN_JOB_ON_ENODEV: bool = true;
+
+    fn run(job: &mut Self) -> Result<Option<dma_fence::Fence>> {
         let execution = &job.execution;
         // Firmware jobs cannot be replayed after a fault without a reboot.
         if execution.started.swap(true, Ordering::AcqRel) {
@@ -1289,15 +1298,15 @@ impl sched::JobImpl for SubmissionJob {
         Ok(Some(fence))
     }
 
-    fn timed_out(job: &mut sched::Job<Self>) -> sched::Status {
-        job.execution.device.failed.store(true, Ordering::Release);
-        job.execution.device.notifications.notify(false);
+    fn timed_out(execution: &mut Self::TimeoutData, _finished: bool) -> sched::Status {
+        execution.device.failed.store(true, Ordering::Release);
+        execution.device.notifications.notify(false);
         // Wake the worker to quarantine firmware mappings and fail the jobs.
         // Do not signal its lifetime fence before that cleanup here.
         sched::Status::NoDevice
     }
 
-    fn cancel(job: &mut sched::Job<Self>) {
+    fn cancel(job: &mut Self) {
         if !job.execution.started.load(Ordering::Acquire) {
             job.execution.completion.set_error(ECANCELED);
             let _ = job.execution.completion.signal();

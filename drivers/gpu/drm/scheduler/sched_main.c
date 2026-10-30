@@ -566,10 +566,19 @@ static void drm_sched_job_timedout(struct work_struct *work)
 		if (sched->free_guilty) {
 			job->sched->ops->free_job(job);
 			sched->free_guilty = false;
-		}
-
-		if (status == DRM_GPU_SCHED_STAT_NO_HANG)
+		} else if (status == DRM_GPU_SCHED_STAT_NO_HANG) {
 			drm_sched_job_reinsert_on_false_timeout(sched, job);
+		} else if (status == DRM_GPU_SCHED_STAT_ENODEV &&
+			   sched->ops->retain_job_on_enodev) {
+			/* Keep terminal jobs reachable without restarting the watchdog.
+			 * A parent signalled during timedout_job must reach free work.
+			 */
+			spin_lock(&sched->job_list_lock);
+			if (list_empty(&job->list))
+				list_add(&job->list, &sched->pending_list);
+			drm_sched_run_free_queue(sched);
+			spin_unlock(&sched->job_list_lock);
+		}
 	} else {
 		spin_unlock(&sched->job_list_lock);
 	}
@@ -1375,6 +1384,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched, const struct drm_sched_init_
 	atomic_set(&sched->_score, 0);
 	atomic64_set(&sched->job_id_count, 0);
 	sched->pause_submit = false;
+	sched->free_guilty = false;
 
 	sched->ready = true;
 	return 0;
@@ -1422,6 +1432,11 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	int i;
 
 	drm_sched_wqueue_stop(sched);
+	/* Finalization cannot restart. Prevent completion callbacks from
+	 * queueing either work item after cancellation has returned.
+	 */
+	disable_work_sync(&sched->work_run_job);
+	disable_work_sync(&sched->work_free_job);
 
 	for (i = DRM_SCHED_PRIORITY_KERNEL; i < sched->num_rqs; i++)
 		kfree(sched->sched_rq[i]);

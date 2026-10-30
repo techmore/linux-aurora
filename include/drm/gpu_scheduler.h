@@ -538,6 +538,21 @@ struct drm_sched_backend_ops {
 	 * drm_sched_backend_ops.free_job.
 	 */
 	void (*cancel_job)(struct drm_sched_job *sched_job);
+
+	/**
+	 * @retain_job_on_enodev: Keep a detached terminal-timeout job owned by
+	 * the scheduler until parent completion or final cancellation. The
+	 * backend must not free it during timedout_job. This does not restart
+	 * the watchdog, signal a hardware fence or establish GPU quiescence.
+	 * Reset backends with their own ownership leave this false.
+	 */
+	bool retain_job_on_enodev;
+
+	/**
+	 * @owner: Callback module, retained by the caller through entity
+	 * destruction. Detached kill work pins it until free_job returns.
+	 */
+	struct module *owner;
 };
 
 /**

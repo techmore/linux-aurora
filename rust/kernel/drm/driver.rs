@@ -122,6 +122,9 @@ pub trait Driver {
     /// Driver metadata
     const INFO: DriverInfo;
 
+    /// Module whose code is used by open DRM files and exported DMA buffers.
+    const MODULE: Option<&'static crate::ThisModule> = None;
+
     /// Feature flags
     const FEATURES: u32;
 
