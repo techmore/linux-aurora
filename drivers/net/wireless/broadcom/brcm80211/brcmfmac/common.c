@@ -5,11 +5,14 @@
 
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/etherdevice.h>
 #include <linux/netdevice.h>
+#include <linux/sizes.h>
 #include <linux/module.h>
 #include <linux/firmware.h>
 #include <brcmu_wifi.h>
 #include <brcmu_utils.h>
+#include <brcm_hw_ids.h>
 #include "core.h"
 #include "bus.h"
 #include "debug.h"
@@ -267,6 +270,53 @@ static const u8 brcmf_default_mac_address[ETH_ALEN] = {
 	0x00, 0x90, 0x4c, 0xc5, 0x12, 0x38
 };
 
+#define BRCMF_CAL_FILE_MAX_SIZE	SZ_32K
+
+/*
+ * Apple's M4 Mac mini (BCM4388) has no Wi-Fi calibration in its ADT, so the
+ * boot loader cannot pass brcm,cal-blob. The installer ships this radio's
+ * factory calibration with the vendor firmware as
+ * brcm/brcmfmac4388-<address>-cal.bin, <address> being the DT
+ * local-mac-address in 12 lowercase hex digits, in its own byte order. This
+ * is the file GravityLinux's U-Boot puts in brcm,cal-blob; apply its checks.
+ * The firmware is kept with the settings until the device is released.
+ */
+static void brcmf_c_load_cal_file(struct brcmf_if *ifp)
+{
+	struct brcmf_pub *drvr = ifp->drvr;
+	struct brcmf_mp_device *settings = drvr->settings;
+	struct brcmf_bus *bus = drvr->bus_if;
+	const struct firmware *fw;
+	char name[48];
+	int err;
+
+	if (settings->cal_blob || bus->chip != BRCM_CC_4388_CHIP_ID ||
+	    !is_valid_ether_addr(settings->cal_mac))
+		return;
+
+	snprintf(name, sizeof(name), "brcm/brcmfmac%04x-%pm-cal.bin",
+		 bus->chip, settings->cal_mac);
+	err = firmware_request_nowarn(&fw, name, bus->dev);
+	if (err) {
+		brcmf_info("no calibration blob in DT or %s (err=%d)\n", name,
+			   err);
+		return;
+	}
+
+	if (fw->size < 4 || fw->size > BRCMF_CAL_FILE_MAX_SIZE ||
+	    memcmp(fw->data, "BLOB", 4)) {
+		bphy_err(drvr, "%s is not a calibration blob (%zu bytes)\n",
+			 name, fw->size);
+		release_firmware(fw);
+		return;
+	}
+
+	settings->cal_fw = fw;
+	settings->cal_blob = fw->data;
+	settings->cal_size = fw->size;
+	brcmf_info("Calibration blob loaded from %s\n", name);
+}
+
 static int brcmf_c_process_cal_blob(struct brcmf_if *ifp)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
@@ -274,6 +324,8 @@ static int brcmf_c_process_cal_blob(struct brcmf_if *ifp)
 	s32 err;
 
 	brcmf_dbg(TRACE, "Enter\n");
+
+	brcmf_c_load_cal_file(ifp);
 
 	if (!settings->cal_blob || !settings->cal_size)
 		return 0;
@@ -573,6 +625,8 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 
 void brcmf_release_module_param(struct brcmf_mp_device *module_param)
 {
+	if (module_param)
+		release_firmware(module_param->cal_fw);
 	kfree(module_param);
 }
 

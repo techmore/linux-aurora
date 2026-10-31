@@ -95,6 +95,10 @@ int brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 	prop = of_get_property(np, "brcm,cal-blob", &settings->cal_size);
 	if (prop && settings->cal_size)
 		settings->cal_blob = prop;
+	else if (!err)
+		/* Names the per-radio calibration file, see brcmf_c_load_cal_file() */
+		of_property_read_u8_array(np, "local-mac-address",
+					  settings->cal_mac, ETH_ALEN);
 
 	/* Set board-type to the first string of the machine compatible prop */
 	root = of_find_node_by_path("/");

@@ -57,6 +57,8 @@ struct brcmf_mp_device {
 	const char	*antenna_sku;
 	const void	*cal_blob;
 	int		cal_size;
+	u8		cal_mac[ETH_ALEN];
+	const struct firmware *cal_fw;
 	union {
 		struct brcmfmac_sdio_pd sdio;
 	} bus;
