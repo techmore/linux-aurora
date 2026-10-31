@@ -38,7 +38,11 @@
  * device tree describes that page as its own syscon. t8122 is unresolved.
  *
  * On t8142, RegMap 0x62 is a separate MMIO region at 0x380780000.
- * The t8132 layout has not been decoded.
+ * The t8132 layout has not been decoded. Its J773g ADT only shows that each
+ * acio-cpuN requests the reconfigure through the PMGR function RIRQ on the
+ * virtual devices CIO0..3_RECONFIG-V (338..341), and that the PMGR also maps
+ * a page at 0x380780000 (reg[36]), the t8142 address. Neither the offset nor
+ * the bits are known, so there is no t8132 entry and its ACIO cannot start.
  *
  * Reference firmware polls the busy bits, stores the request, then polls
  * again, with a 192 ms budget. It discards the first poll's result. The

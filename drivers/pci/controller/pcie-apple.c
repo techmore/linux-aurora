@@ -275,6 +275,20 @@ static const struct hw_info t8122_pciec_hw = {
 	.tunneled		= true,
 };
 
+/*
+ * T8132 PCIe-C (apciec0/1/3 on J773g): taken to keep the t8122 tunnel port
+ * layout, as Gravity's T8132 tunnel driver and T6030 both do. Only the MSI
+ * slices below come from the T8132 ADT; the port layout is not measured.
+ */
+static const struct hw_info t8132_pciec_hw = {
+	.port_msiaddr		= PORT_MSIADDR,
+	.port_perst		= PORT_PERST,
+	.port_rid2sid		= PORT_RID2SID,
+	.port_msimap		= PORT_T602X_MSIMAP,
+	.max_rid2sid		= 64,
+	.tunneled		= true,
+};
+
 static const struct of_device_id apple_pcie_of_match[];
 
 /**
@@ -1864,6 +1878,34 @@ static bool apple_t6030_msi_slice_valid(u32 base, u32 count, u32 aic_irq)
 	       count == 32 && aic_irq == 1342 + base;
 }
 
+/*
+ * T8132 likewise shares one AIC MSI window (ADT apciecN msi-vector-offset
+ * 1506). Each pcicN-bridge owns 32 vectors from its ADT msi-vector-base:
+ * apciec0 96, apciec1 128, apciec3 192. There is no apciec2 on J773g.
+ */
+static int apple_t8132_msi_slice(struct device_node *np, u32 *base)
+{
+	struct resource ecam;
+
+	if (!of_machine_is_compatible("apple,t8132") ||
+	    of_address_to_resource(np, 0, &ecam))
+		return -EINVAL;
+
+	switch (ecam.start) {
+	case 0x1c50000000ULL:
+		*base = 96;
+		return 0;
+	case 0x1c60000000ULL:
+		*base = 128;
+		return 0;
+	case 0x1c80000000ULL:
+		*base = 192;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int apple_msi_init(struct apple_pcie *pcie)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(pcie->dev);
@@ -1943,8 +1985,23 @@ static int apple_msi_init(struct apple_pcie *pcie)
 			goto invalid_slice;
 	}
 
+	if (pcie->hw == &t8132_pciec_hw) {
+		u32 expected_base;
+
+		if (apple_t8132_msi_slice(to_of_node(fwnode), &expected_base) ||
+		    args.args_count != 3 || args.args[0] != 0 ||
+		    args.args[2] != IRQ_TYPE_EDGE_RISING ||
+		    of_property_read_u32(to_of_node(fwnode),
+					 "apple,msi-vector-base",
+					 &pcie->msi_vector_base) ||
+		    pcie->msi_vector_base != expected_base ||
+		    pcie->nvecs != 32 ||
+		    args.args[1] != 1506 + expected_base)
+			goto invalid_slice;
+	}
+
 	/* Keep map targets within the supported 8-bit range. */
-	if (pcie->hw == &t8122_pciec_hw &&
+	if ((pcie->hw == &t8122_pciec_hw || pcie->hw == &t8132_pciec_hw) &&
 	    (!pcie->nvecs || pcie->nvecs > 256 ||
 	     pcie->msi_vector_base >
 	     FIELD_MAX(PORT_MSIMAP_TARGET) + 1 - pcie->nvecs)) {
@@ -3718,6 +3775,7 @@ static const struct dev_pm_ops apple_pcie_pm_ops = {
 };
 
 static const struct of_device_id apple_pcie_of_match[] = {
+	{ .compatible = "apple,t8132-pciec",	.data = &t8132_pciec_hw },
 	{ .compatible = "apple,t8122-pciec",	.data = &t8122_pciec_hw },
 	{ .compatible = "apple,t8112-pciec",	.data = &t8112_pciec_hw },
 	{ .compatible = "apple,t8103-pciec",	.data = &t8103_pciec_hw },

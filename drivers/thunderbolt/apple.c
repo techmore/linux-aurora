@@ -151,6 +151,19 @@ static const struct apple_cio_hw apple_cio_t6030_hw = {
 	.dp = &apple_dpin_m3,
 };
 
+/*
+ * T8132 ADT acio-cpuN nodes are "iop,mxwrap-acio" with the wrapper at reg[1],
+ * and each acioN has a gpio-lstx AOP pin, as on t6030; the start flags are
+ * therefore t6030's. Not measured on T8132. No DP IN route is qualified: the
+ * T8132 display crossbar and external DCP are not supported on this tree.
+ */
+static const struct apple_cio_hw apple_cio_t8132_hw = {
+	.mxwrap = true,
+	.lstx_explicit = true,
+	.strict_fw_ready = true,
+	.dp = &apple_dpin_disabled,
+};
+
 /* Type 7 uses its existing ready-state check and has no qualified DP route. */
 static const struct apple_cio_hw apple_cio_t8142_hw = {
 	.dp = &apple_dpin_disabled,
@@ -3326,6 +3339,10 @@ static const struct of_device_id apple_acio_match[] = {
 	{
 		.compatible = "apple,t8142-usb4-acio",
 		.data = &apple_cio_t8142_hw,
+	},
+	{
+		.compatible = "apple,t8132-usb4-acio",
+		.data = &apple_cio_t8132_hw,
 	},
 	{
 		.compatible = "apple,t6030-usb4-acio",
