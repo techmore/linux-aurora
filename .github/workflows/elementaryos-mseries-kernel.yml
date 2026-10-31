@@ -28,7 +28,9 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    # Repo variable KERNEL_RUNNER selects a self-hosted runner, e.g. ["self-hosted","linux","arm64","m1pro"];
+    # without it the job uses GitHub's 4-core Ubuntu 26.04 arm64 runner.
+    runs-on: ${{ fromJSON(vars.KERNEL_RUNNER || '"ubuntu-26.04-arm"') }}
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
@@ -37,9 +39,18 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          if [ "${{ runner.environment }}" != "github-hosted" ]; then
+            # Self-hosted: the owner installs the packages once (see the runner notes); only make sure
+            # the Rust toolchain and bindgen versions are present.
+            command -v rustup >/dev/null || curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            "$HOME/.cargo/bin/rustup" toolchain install "$RUST" --profile minimal -c rust-src -c rustfmt
+            "$HOME/.cargo/bin/bindgen" --version 2>/dev/null | grep -q " $BINDGEN" || "$HOME/.cargo/bin/cargo" install --locked bindgen-cli --version "$BINDGEN"
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bc bison flex cpio dwarves \
-            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev
+            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev ccache
           curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/rustup" component add --toolchain "$RUST" rust-src rustfmt
@@ -57,30 +68,59 @@ jobs:
             "$CONFIG_SHA256" "$BINDGEN_WRAPPER_SHA256" "$VALIDATE_SHA256" | sha256sum -c -
           chmod +x bindgen-kernel.py
 
+      # The hosted arm64 runner has 4 cores; reuse unchanged C objects between builds.
+      # Rust objects are not cached by ccache.
+      # Self-hosted runners keep each branch's build tree and the ccache on local disk, so only
+      # changed files recompile; only GitHub's runners move the cache through actions/cache.
+      - name: Choose the build directory
+        run: |
+          if [ "${{ runner.environment }}" = "github-hosted" ]; then
+            echo "KOUT=$PWD/build" >> "$GITHUB_ENV"
+          else
+            slug=$(echo "${{ github.ref_name }}" | tr '/' '-')
+            echo "KOUT=$HOME/kbuild/$slug" >> "$GITHUB_ENV"
+            mkdir -p "$HOME/kbuild"
+            # Keep the four most recent branch trees (about 12 GB each).
+            ls -1dt "$HOME"/kbuild/*/ 2>/dev/null | tail -n +5 | xargs -r rm -rf
+          fi
+
+      - name: Restore the compiler cache
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.ref_name }}-
+            ccache-elementaryos-mseries-
+
       - name: Configure
         run: |
-          mkdir -p build
-          cp "$RUNNER_TEMP/aurora/config" build/.config
-          scripts/kconfig/merge_config.sh -m -O "$PWD/build" build/.config arch/arm64/configs/asahi.config
-          scripts/config --file build/.config --set-str LOCALVERSION '-elementaryos-mseries' --disable LOCALVERSION_AUTO
-          make ARCH=arm64 LLVM=1 O=build olddefconfig
-          python3 "$RUNNER_TEMP/aurora/validate-config.py" arch/arm64/configs/asahi.config build/.config
-          grep -qx 'CONFIG_RUST=y' build/.config
-          grep -E '^CONFIG_(DRM_ASAHI|DRM_APPLE|APPLE_PMP|ARM64_16K_PAGES)[A-Z_]*=' build/.config | tee build/key-config.txt
+          mkdir -p "$KOUT"
+          cp "$RUNNER_TEMP/aurora/config" "$KOUT/.config"
+          scripts/kconfig/merge_config.sh -m -O "$KOUT" "$KOUT/.config" arch/arm64/configs/asahi.config
+          scripts/config --file "$KOUT/.config" --set-str LOCALVERSION '-elementaryos-mseries' --disable LOCALVERSION_AUTO
+          make ARCH=arm64 LLVM=1 O="$KOUT" olddefconfig
+          python3 "$RUNNER_TEMP/aurora/validate-config.py" arch/arm64/configs/asahi.config "$KOUT/.config"
+          grep -qx 'CONFIG_RUST=y' "$KOUT/.config"
+          grep -E '^CONFIG_(DRM_ASAHI|DRM_APPLE|APPLE_PMP|ARM64_16K_PAGES)[A-Z_]*=' "$KOUT/.config" | tee "$KOUT/key-config.txt"
 
       - name: Build Image, modules and DTBs
         run: |
           export AURORA_BINDGEN_REAL="$HOME/.cargo/bin/bindgen" RUSTUP_TOOLCHAIN="$RUST"
           export LIBCLANG_PATH="$(llvm-config --libdir)"
           export RUSTFMT="$(rustup which --toolchain "$RUST" rustfmt)"
-          make ARCH=arm64 LLVM=1 O=build BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
-            -j"$(nproc)" Image modules apple/t8132-j773g.dtb apple/t8132-j713.dtb 2>&1 | tee build/build.log
-          test -f build/arch/arm64/boot/Image
-          test -f build/arch/arm64/boot/dts/apple/t8132-j773g.dtb
+          export CCACHE_DIR="$HOME/.cache/ccache" CCACHE_MAXSIZE=3G CCACHE_COMPILERCHECK=content
+          ccache -z
+          make ARCH=arm64 LLVM=1 CC="ccache clang" O="$KOUT" BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
+            -j"$(nproc)" Image modules apple/t8132-j773g.dtb apple/t8132-j713.dtb 2>&1 | tee "$KOUT/build.log"
+          test -f "$KOUT/arch/arm64/boot/Image"
+          ccache -s
+          test -f "$KOUT/arch/arm64/boot/dts/apple/t8132-j773g.dtb"
 
       - name: Check the J773g device tree
         run: |
-          dtb=build/arch/arm64/boot/dts/apple/t8132-j773g.dtb
+          dtb="$KOUT/arch/arm64/boot/dts/apple/t8132-j773g.dtb"
           fdtget "$dtb" / compatible
           fdtget -t s "$dtb" /aliases pmp
           fdtget -t s "$dtb" /aliases gpu
@@ -88,14 +128,14 @@ jobs:
 
       - name: Stage artifacts
         run: |
-          out="$RUNNER_TEMP/out"
-          mkdir -p "$out"
-          make ARCH=arm64 LLVM=1 O=build INSTALL_MOD_PATH="$out/modules" INSTALL_MOD_STRIP=1 modules_install
-          cp build/arch/arm64/boot/Image build/arch/arm64/boot/dts/apple/t8132-j773g.dtb \
-            build/arch/arm64/boot/dts/apple/t8132-j713.dtb build/.config build/key-config.txt "$out/"
-          make -s O=build kernelrelease > "$out/kernelrelease"
+          # Image, device trees and config only (about 50 MB): the packages carry the modules.
+          out="$RUNNER_TEMP/out"; rm -rf "$out"; mkdir -p "$out"
+          cp "$KOUT"/arch/arm64/boot/Image "$KOUT"/arch/arm64/boot/dts/apple/t8132-*.dtb \
+            "$KOUT"/.config "$KOUT"/key-config.txt "$out/"
+          make -s O="$KOUT" kernelrelease > "$out/kernelrelease"
           git rev-parse HEAD > "$out/source-commit"
           (cd "$out" && sha256sum Image *.dtb > SHA256SUMS)
+          xz -T0 -6 "$out/Image"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -107,5 +147,5 @@ jobs:
         if: always()
         with:
           name: build-log-${{ github.sha }}
-          path: build/build.log
+          path: ${{ env.KOUT }}/build.log
           retention-days: 14
