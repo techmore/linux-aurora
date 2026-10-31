@@ -15,6 +15,43 @@
 / {
 	compatible = "apple,j773g", "apple,t8132", "apple,arm-platform";
 	model = "Apple Mac mini (M4, 2024)";
+
+	aliases {
+		pmp = &pmp;
+	};
+
+	chosen {
+		linux-enablement-mac,dapf-handoff = "/arm-io/pmp";
+		linux-enablement-mac,dapf-power-on-handoff = "/arm-io/pmp";
+	};
+};
+
+/*
+ * The GPU's power votes go through the existing PMP. The J773g ADT carries the
+ * same 34-entry PMP table as J713 (GFX at entry 12, DISP at entry 15), and the
+ * same GPU apertures, interrupts and firmware segments.
+ */
+&pmp_dart {
+	status = "okay";
+};
+
+&pmp_report {
+	status = "okay";
+};
+
+&pmp_mbox {
+	status = "okay";
+};
+
+/* Same memory-controller settings as J713 (static-voters copied, unverified on J773g). */
+&mcc {
+	status = "okay";
+	apple,boot-dma-devices = <&pmp>;
+};
+
+&pmc {
+	status = "okay";
+	apple,static-voters = <3>;
 };
 
 /*
@@ -23,3 +60,5 @@
 &framebuffer0 {
 	power-domains = <&ps_dispext0_fe>, <&ps_dptx_phy>;
 };
+
+#include "t8132-gpu.dtsi"
