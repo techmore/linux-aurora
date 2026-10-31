@@ -21,6 +21,7 @@
 #include <linux/pci.h>
 #include <linux/printk.h>
 #include <linux/property.h>
+#include <linux/sizes.h>
 #include <linux/workqueue.h>
 
 #include <linux/unaligned.h>
@@ -558,6 +559,9 @@ static const struct dmi_system_id bcm4377_dmi_board_table[];
  * taurus_beamforming_cal_blob: "Taurus" beamforming calibration blob used for
  *                              some chips
  * taurus_beamforming_cal_size: "Taurus" beamforming calibration blob size
+ * bf_cal_name: Per-radio beamforming calibration file, used when the loader
+ *              did not supply brcm,taurus-bf-cal-blob (BCM4388 only)
+ * bf_cal_fw: That file once loaded; kept for reloads after a reset
  * stepping: Chip stepping read from OTP; used for firmware selection
  * vendor: Antenna vendor read from OTP; used for firmware selection
  * board_type: Board type from FDT or DMI match; used for firmware selection
@@ -595,6 +599,8 @@ struct bcm4377_data {
 	int taurus_cal_size;
 	const void *taurus_beamforming_cal_blob;
 	int taurus_beamforming_cal_size;
+	char bf_cal_name[48];
+	const struct firmware *bf_cal_fw;
 
 	char stepping[BCM4377_OTP_MAX_PARAM_LEN];
 	char vendor[BCM4377_OTP_MAX_PARAM_LEN];
@@ -1289,8 +1295,51 @@ static int bcm4387_send_calibration(struct bcm4377_data *bcm4377)
 						  bcm4377->taurus_cal_size);
 }
 
+/* Gravity's U-Boot applies the same bounds and marker before using the file. */
+#define BCM4388_BF_CAL_MAX_SIZE SZ_32K
+
+static int bcm4388_load_bf_cal_file(struct bcm4377_data *bcm4377)
+{
+	const struct firmware *fw;
+	int ret;
+
+	if (bcm4377->taurus_beamforming_cal_blob || !bcm4377->bf_cal_name[0])
+		return 0;
+
+	ret = firmware_request_nowarn(&fw, bcm4377->bf_cal_name,
+				      &bcm4377->pdev->dev);
+	if (ret) {
+		dev_err(&bcm4377->pdev->dev,
+			"no brcm,taurus-bf-cal-blob and cannot load %s: %d\n",
+			bcm4377->bf_cal_name, ret);
+		return ret;
+	}
+
+	if (fw->size < 4 || fw->size > BCM4388_BF_CAL_MAX_SIZE ||
+	    memcmp(fw->data, "BLOB", 4)) {
+		dev_err(&bcm4377->pdev->dev,
+			"%s is not a beamforming calibration (%zu bytes)\n",
+			bcm4377->bf_cal_name, fw->size);
+		release_firmware(fw);
+		return -EINVAL;
+	}
+
+	bcm4377->bf_cal_fw = fw;
+	bcm4377->taurus_beamforming_cal_blob = fw->data;
+	bcm4377->taurus_beamforming_cal_size = fw->size;
+	dev_info(&bcm4377->pdev->dev,
+		 "loaded %zu bytes of beamforming calibration from %s\n",
+		 fw->size, bcm4377->bf_cal_name);
+	return 0;
+}
+
 static int bcm4388_send_calibration(struct bcm4377_data *bcm4377)
 {
+	int ret = bcm4388_load_bf_cal_file(bcm4377);
+
+	if (ret)
+		return ret;
+
 	/* BCM4388 always uses beamforming */
 	return __bcm4378_send_calibration(
 		bcm4377, bcm4377->taurus_beamforming_cal_blob,
@@ -2688,6 +2737,52 @@ static int bcm4377_probe_dmi(struct bcm4377_data *bcm4377)
 	return 0;
 }
 
+static void bcm4388_release_bf_cal_file(void *data)
+{
+	struct bcm4377_data *bcm4377 = data;
+
+	release_firmware(bcm4377->bf_cal_fw);
+	bcm4377->bf_cal_fw = NULL;
+}
+
+/*
+ * On Macs whose ADT carries no Bluetooth calibration (the M4 Mac mini, J773g),
+ * the installer extracts this radio's factory beamforming calibration and
+ * ships it with the vendor firmware as brcm/brcmbt4388-<address>-bf.bin, where
+ * <address> is the factory Bluetooth address in 12 lowercase hex digits, the
+ * reverse of the little-endian local-bd-address the loader sets. It is loaded
+ * with the firmware, when the controller is set up. A loader-supplied
+ * brcm,taurus-bf-cal-blob always takes precedence.
+ */
+static int bcm4388_prepare_bf_cal_file(struct bcm4377_data *bcm4377)
+{
+	u8 addr[6];
+	int i;
+
+	if (bcm4377->hw->id != 0x4388) {
+		dev_err(&bcm4377->pdev->dev,
+			"no brcm,taurus-bf-cal-blob property\n");
+		return -ENOENT;
+	}
+
+	for (i = 0; i < 6; i++)
+		addr[i] = bcm4377->bdaddr.b[5 - i];
+	if (!bacmp(&bcm4377->bdaddr, BDADDR_ANY) || (addr[0] & 1)) {
+		dev_err(&bcm4377->pdev->dev,
+			"no brcm,taurus-bf-cal-blob property and no valid local-bd-address\n");
+		return -ENOENT;
+	}
+
+	snprintf(bcm4377->bf_cal_name, sizeof(bcm4377->bf_cal_name),
+		 "brcm/brcmbt%04x-%6phN-bf.bin", bcm4377->hw->id, addr);
+	dev_info(&bcm4377->pdev->dev,
+		 "no brcm,taurus-bf-cal-blob property; will load %s\n",
+		 bcm4377->bf_cal_name);
+
+	return devm_add_action_or_reset(&bcm4377->pdev->dev,
+					bcm4388_release_bf_cal_file, bcm4377);
+}
+
 static int bcm4377_probe_of(struct bcm4377_data *bcm4377)
 {
 	struct device_node *np = bcm4377->pdev->dev.of_node;
@@ -2703,13 +2798,16 @@ static int bcm4377_probe_of(struct bcm4377_data *bcm4377)
 		return ret;
 	}
 
+	device_property_read_u8_array(&bcm4377->pdev->dev, "local-bd-address",
+				      (u8 *)&bcm4377->bdaddr, 6);
+
 	bcm4377->taurus_beamforming_cal_blob =
 		of_get_property(np, "brcm,taurus-bf-cal-blob",
 				&bcm4377->taurus_beamforming_cal_size);
 	if (!bcm4377->taurus_beamforming_cal_blob) {
-		dev_err(&bcm4377->pdev->dev,
-			"no brcm,taurus-bf-cal-blob property\n");
-		return -ENOENT;
+		ret = bcm4388_prepare_bf_cal_file(bcm4377);
+		if (ret)
+			return ret;
 	}
 	bcm4377->taurus_cal_blob = of_get_property(np, "brcm,taurus-cal-blob",
 						   &bcm4377->taurus_cal_size);
@@ -2719,9 +2817,6 @@ static int bcm4377_probe_of(struct bcm4377_data *bcm4377)
 			"no brcm,taurus-cal-blob property\n");
 		return -ENOENT;
 	}
-
-	device_property_read_u8_array(&bcm4377->pdev->dev, "local-bd-address",
-				      (u8 *)&bcm4377->bdaddr, 6);
 
 	return 0;
 }
