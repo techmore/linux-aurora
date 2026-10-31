@@ -238,7 +238,8 @@ bool dcp_t6041_ext_enabled(void)
 
 static bool dcp_desktop_external(struct apple_dcp *dcp)
 {
-	return of_device_is_compatible(dcp->dev->of_node, "apple,t6041-dcpext");
+	return of_device_is_compatible(dcp->dev->of_node, "apple,t6041-dcpext") ||
+	       of_device_is_compatible(dcp->dev->of_node, "apple,t8132-dcpext");
 }
 
 /*
@@ -4609,6 +4610,9 @@ static int dcp_read_fw_version(struct device *dev, const char *name,
 	return len;
 }
 
+/* The T8132 DCP image of firmware 26.6.2 (ADT iop-dcp*-nub uuid on J713 and J773g). */
+#define DCP_T8132_FIRMWARE_UUID "81BAF476-679D-3CC0-8C6A-E6B6FA659D5E"
+
 static enum dcp_firmware_version dcp_check_firmware_version(struct device *dev)
 {
 	const struct apple_dcp_hw_data *hw = of_device_get_match_data(dev);
@@ -4626,6 +4630,30 @@ static enum dcp_firmware_version dcp_check_firmware_version(struct device *dev)
 
 	/* firmware version is just informative */
 	ret = dcp_read_fw_version(dev, "apple,firmware-version", fw_str);
+
+	/*
+	 * The Mac mini M4 (J773g) HDMI processor, dcpext0: the same 26.6.2
+	 * firmware image as the J713 panel's DCP, which speaks the desktop
+	 * 26.6 IOMFB of T6041 (see apple_dcp_hw_t8132_dcpext).  Only on J773g,
+	 * and only with that exact release and image.
+	 */
+	if (of_device_is_compatible(dev->of_node, "apple,t8132-dcpext")) {
+		const char *uuid = NULL;
+		int compat_ret = dcp_read_fw_version(dev, "apple,firmware-compat",
+						     compat_str);
+
+		of_property_read_string(dev->of_node, "apple,firmware-uuid", &uuid);
+		if (of_machine_is_compatible("apple,j773g") &&
+		    ret >= 0 && compat_ret >= 0 && !strcmp(fw_str, "26.6.2") &&
+		    !strcmp(compat_str, "26.6.2") && uuid &&
+		    !strcmp(uuid, DCP_T8132_FIRMWARE_UUID))
+			return DCP_FIRMWARE_V_26_6_DESKTOP;
+		dev_err(dev, "T8132 external display not started: DCP firmware %s (compat %s, uuid %s) on this board is not the J773g 26.6.2 image\n",
+			ret >= 0 ? fw_str : "missing",
+			compat_ret >= 0 ? compat_str : "missing",
+			uuid ?: "missing");
+		return DCP_FIRMWARE_UNKNOWN;
+	}
 
 	/*
 	 * T6041 (M4 Pro/Max) is driven only with the 26.6.2 firmware its
@@ -6489,9 +6517,21 @@ static const struct apple_dcp_hw_data apple_dcp_hw_t6041_dcpext = {
 	.sink_metadata_edid = true,
 };
 
+/*
+ * T8132 external processor (J773g HDMI): the desktop 26.6 IOMFB and DPTX
+ * services of the T6041 external processors.  Gravity drives the mini's
+ * HDMI with one 26.6 method table for T8132 and T6041; it is a subset of
+ * iomfb_v26_6_desktop.c's, with the same numbers.
+ */
+static const struct apple_dcp_hw_data apple_dcp_hw_t8132_dcpext = {
+	.num_dptx_ports = 2,
+	.sink_metadata_edid = true,
+};
+
 static const struct of_device_id of_match[] = {
 	{ .compatible = "apple,t6041-dcp", .data = &apple_dcp_hw_t6041, },
 	{ .compatible = "apple,t6041-dcpext", .data = &apple_dcp_hw_t6041_dcpext, },
+	{ .compatible = "apple,t8132-dcpext", .data = &apple_dcp_hw_t8132_dcpext, },
 	{ .compatible = "apple,t6020-dcp", .data = &apple_dcp_hw_t6020,  },
 	{ .compatible = "apple,t6020-dcpext", .data = &apple_dcp_hw_t6020_dcpext, },
 	{ .compatible = "apple,t8112-dcp", .data = &apple_dcp_hw_t8112,  },
