@@ -41,7 +41,7 @@ config SND_SOC_APPLE_MACAUDIO
 	  sound support on these machines.
 
 config SND_SOC_APPLE_T8132_SPEAKER
-	tristate "Experimental T8132 Mac mini internal speaker"
+	tristate "Mac mini (M4, J773g) internal speaker (EXPERIMENTAL)"
 	depends on ARCH_APPLE && ARM64_16K_PAGES && I2C && GPIOLIB && OF
 	depends on DMADEVICES
 	select SND_PCM
@@ -49,14 +49,26 @@ config SND_SOC_APPLE_T8132_SPEAKER
 	select SND_SOC_TAS2764
 	select APPLE_ADMAC
 	help
-	  Fixed-format J773g internal-speaker playback with an in-kernel
-	  voice-coil thermal model. Samples are attenuated and their energy
-	  is charged before they reach the DMA ring, so no userspace daemon
-	  or V/I feedback is needed. The amplifier is held at a hardware
-	  ceiling set by the ceiling_dvc module parameter.
+	  Mono internal-speaker playback for the Mac mini (M4, 2024, J773g):
+	  MCA cluster 0 (TX0) on the T8132 drives the SN012776 (TAS2764
+	  family) amplifier on I2C3. Playback is fixed at 48 kHz, mono,
+	  S24_LE, and the card is named "T8132Speaker".
 
-	  Uses the shared MCA, ADMAC, DART and TAS2764 drivers with J773g
-	  routing and protected PCM copies. This driver can be built into
-	  the kernel or as the snd-t8132-speaker module.
+	  WARNING: speaker protection is done by an in-kernel voice-coil
+	  thermal model, not by speakersafetyd and not by the amplifier's
+	  V/I sense feedback. Samples are attenuated, and their energy charged
+	  to the model, before they reach the DMA ring; the amplifier is held
+	  at a hardware volume ceiling (module parameter ceiling_dvc, default
+	  20 = -10 dB). The model's thermal constants come from the J773g
+	  macOS preset, but the electrical parameters (full_scale_mv,
+	  resistance_mohm, power_margin_pct) are unmeasured assumptions and
+	  the limiter has not been validated against real voice-coil
+	  temperatures. Loud, sustained playback may damage the speaker.
+	  Do not raise the ceiling.
+
+	  The driver binds only to an "apple,j773g-speaker" device tree node.
+	  It is off by default: enable it only if you accept that risk. To
+	  build it as a module, choose M here: the module will be called
+	  snd-t8132-speaker. Blacklisting that module disables the speaker.
 
 endmenu
