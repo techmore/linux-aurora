@@ -27,6 +27,9 @@
 		atcphy2 = &atcphy2;
 		atcphy3 = &atcphy3;
 		bluetooth0 = &bluetooth0;
+		dcpext0 = &dcpext0;
+		disp0 = &display;
+		dispext0_piodma = &dispext0_piodma;
 		ethernet0 = &ethernet0;
 		pmp = &pmp;
 		sart-ans = &sart;
@@ -72,6 +75,48 @@
  */
 &framebuffer0 {
 	power-domains = <&ps_dispext0_fe>, <&ps_dptx_phy>;
+};
+
+/*
+ * HDMI: dcpext0 -> display crossbar -> DPTX PHY (ADT dptx-phy,
+ * dp-switch-dfp-endpoint 4) -> on-board DP-to-HDMI converter (ADT
+ * dp2hdmi-gpio0: hdmi_pwr_en SMC gP0f, dp2hdmi_pwr_en SMC gP1a, hdmi_hpd
+ * AOP GPIO 0x29). dcpext0 is the pipe iBoot leaves on the port: the boot
+ * framebuffer needs DISPEXT0 and the DPTX PHY powered.
+ *
+ * The PHY's probe touches no registers and is enabled here. The display
+ * processor, its mailbox, both DARTs and the display subsystem stay
+ * disabled: the boot loader enables them once it has published dcpext0's
+ * firmware identity (apple,firmware-version/-compat/-uuid), its firmware
+ * memory with the live iommu-addresses and the boot framebuffer, and locked
+ * dart-dcpext0 and dart-dispext0. Without that the display stays on the
+ * boot framebuffer.
+ */
+&soc {
+	display: display-subsystem {
+		compatible = "apple,display-subsystem";
+		iommus = <&dispext0_dart 0>;
+		/* scanout surfaces are real-time memory, as on T6041 */
+		dma-noncoherent;
+		status = "disabled"; /* Enabled by the loader. */
+	};
+};
+
+&dptxphy {
+	status = "okay";
+};
+
+&dcpext0 {
+	apple,connector-type = "HDMI-A";
+	/* primary and overlay surfaces, as the T6041 external processors */
+	apple,iomfb-surfaces = <1 1 0 0>;
+	phys = <&dptxphy>;
+	phy-names = "dp-phy";
+	apple,dptx-phy = <4>;
+	hdmi-hpd-gpios = <&pinctrl_aop 41 GPIO_ACTIVE_HIGH>;
+	hdmi-pwren-gpios = <&smc_gpio 15 GPIO_ACTIVE_HIGH>;
+	dp2hdmi-pwren-gpios = <&smc_gpio 26 GPIO_ACTIVE_HIGH>;
+	/* status: enabled by the loader, with dcpext0_mbox and both DARTs */
 };
 
 /*
