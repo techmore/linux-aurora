@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+ OR MIT
 /*
- * Apple MacBook Air (13-inch, M4) G16 GPU resources.
+ * Apple M4 (T8132) G16 GPU resources, shared by the boards that enable the GPU.
  *
  * Node structure follows the J713 ADT; values match the cleanroom J713 live
  * device tree. The Rust Asahi G16 backend is loaded explicitly after the
@@ -91,7 +91,7 @@
 	};
 };
 
-/* The outer TVM gate is the parent of the GFX PMGR domain on J713. */
+/* The outer TVM gate is the parent of the GFX PMGR domain on T8132. */
 &ps_gfx {
 	status = "okay";
 	power-domains = <&gfx_tvm>;
