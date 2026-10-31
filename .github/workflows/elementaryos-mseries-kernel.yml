@@ -28,9 +28,7 @@ env:
 
 jobs:
   build:
-    # Repo variable KERNEL_RUNNER selects a self-hosted runner, e.g. ["self-hosted","linux","arm64","m1pro"];
-    # without it the job uses GitHub's 4-core Ubuntu 26.04 arm64 runner.
-    runs-on: ${{ fromJSON(vars.KERNEL_RUNNER || '"ubuntu-26.04-arm"') }}
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
@@ -39,18 +37,9 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          if [ "${{ runner.environment }}" != "github-hosted" ]; then
-            # Self-hosted: the owner installs the packages once (see the runner notes); only make sure
-            # the Rust toolchain and bindgen versions are present.
-            command -v rustup >/dev/null || curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
-            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-            "$HOME/.cargo/bin/rustup" toolchain install "$RUST" --profile minimal -c rust-src -c rustfmt
-            "$HOME/.cargo/bin/bindgen" --version 2>/dev/null | grep -q " $BINDGEN" || "$HOME/.cargo/bin/cargo" install --locked bindgen-cli --version "$BINDGEN"
-            exit 0
-          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bc bison flex cpio dwarves \
-            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev ccache
+            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev
           curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/rustup" component add --toolchain "$RUST" rust-src rustfmt
@@ -68,17 +57,6 @@ jobs:
             "$CONFIG_SHA256" "$BINDGEN_WRAPPER_SHA256" "$VALIDATE_SHA256" | sha256sum -c -
           chmod +x bindgen-kernel.py
 
-      # The hosted arm64 runner has 4 cores; reuse unchanged C objects between builds.
-      # Rust objects are not cached by ccache.
-      - name: Restore the compiler cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ github.ref_name }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ github.ref_name }}-
-            ccache-elementaryos-mseries-
-
       - name: Configure
         run: |
           mkdir -p build
@@ -95,12 +73,9 @@ jobs:
           export AURORA_BINDGEN_REAL="$HOME/.cargo/bin/bindgen" RUSTUP_TOOLCHAIN="$RUST"
           export LIBCLANG_PATH="$(llvm-config --libdir)"
           export RUSTFMT="$(rustup which --toolchain "$RUST" rustfmt)"
-          export CCACHE_DIR="$HOME/.cache/ccache" CCACHE_MAXSIZE=3G CCACHE_COMPILERCHECK=content
-          ccache -z
-          make ARCH=arm64 LLVM=1 CC="ccache clang" O=build BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
+          make ARCH=arm64 LLVM=1 O=build BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
             -j"$(nproc)" Image modules apple/t8132-j773g.dtb apple/t8132-j713.dtb 2>&1 | tee build/build.log
           test -f build/arch/arm64/boot/Image
-          ccache -s
           test -f build/arch/arm64/boot/dts/apple/t8132-j773g.dtb
 
       - name: Check the J773g device tree
