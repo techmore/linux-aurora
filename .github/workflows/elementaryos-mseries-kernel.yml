@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bc bison flex cpio dwarves \
-            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev
+            device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev ccache
           curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/rustup" component add --toolchain "$RUST" rust-src rustfmt
@@ -57,6 +57,17 @@ jobs:
             "$CONFIG_SHA256" "$BINDGEN_WRAPPER_SHA256" "$VALIDATE_SHA256" | sha256sum -c -
           chmod +x bindgen-kernel.py
 
+      # The hosted arm64 runner has 4 cores; reuse unchanged C objects between builds.
+      # Rust objects are not cached by ccache.
+      - name: Restore the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.ref_name }}-
+            ccache-elementaryos-mseries-
+
       - name: Configure
         run: |
           mkdir -p build
@@ -73,9 +84,12 @@ jobs:
           export AURORA_BINDGEN_REAL="$HOME/.cargo/bin/bindgen" RUSTUP_TOOLCHAIN="$RUST"
           export LIBCLANG_PATH="$(llvm-config --libdir)"
           export RUSTFMT="$(rustup which --toolchain "$RUST" rustfmt)"
-          make ARCH=arm64 LLVM=1 O=build BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
+          export CCACHE_DIR="$HOME/.cache/ccache" CCACHE_MAXSIZE=3G CCACHE_COMPILERCHECK=content
+          ccache -z
+          make ARCH=arm64 LLVM=1 CC="ccache clang" O=build BINDGEN="$RUNNER_TEMP/aurora/bindgen-kernel.py" LOCALVERSION= \
             -j"$(nproc)" Image modules apple/t8132-j773g.dtb apple/t8132-j713.dtb 2>&1 | tee build/build.log
           test -f build/arch/arm64/boot/Image
+          ccache -s
           test -f build/arch/arm64/boot/dts/apple/t8132-j773g.dtb
 
       - name: Check the J773g device tree
