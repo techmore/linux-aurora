@@ -17,7 +17,10 @@
 	model = "Apple Mac mini (M4, 2024)";
 
 	aliases {
+		ans = &nvme;
+		ans-mbox = &ans_mbox;
 		pmp = &pmp;
+		sart-ans = &sart;
 	};
 
 	chosen {
