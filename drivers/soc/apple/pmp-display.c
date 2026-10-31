@@ -165,7 +165,7 @@ static DEFINE_MUTEX(pmp_display_registration);
 
 bool apple_pmp_display_retained_board(void)
 {
-	return apple_pmp_j713_board();
+	return apple_pmp_g16_board();
 }
 
 /* The qualified loader publishes the existing PMP through its alias. */
@@ -181,7 +181,7 @@ struct apple_pmp_display *apple_pmp_display_register(struct device *dev,
 	struct device_node *node, *qualified;
 	const void *table;
 	int size;
-	bool match, j713 = apple_pmp_j713_board();
+	bool match, j713 = apple_pmp_g16_board();
 
 	if (!j713 || !dev->of_node ||
 	    !of_device_is_compatible(dev->of_node,
@@ -219,7 +219,7 @@ struct apple_pmp_display *apple_pmp_display_register(struct device *dev,
 	pm_runtime_get_noresume(dev);
 	smp_store_release(&pmp_display, p);
 	dev_info(dev, "%s PMP vote bridge ready; retained existing PMP owner\n",
-		 j713 ? "J713" : "J514S");
+		 of_machine_is_compatible("apple,j773g") ? "J773g" : j713 ? "J713" : "J514S");
 out:
 	mutex_unlock(&pmp_display_registration);
 	return p;
@@ -262,7 +262,7 @@ static struct apple_pmp_display *pmp_power_consumer(struct device *consumer,
 	struct device_node *pmp, *supplier;
 	bool match;
 
-	if (apple_pmp_j713_board()) {
+	if (kind == PMP_POWER_AGX ? apple_pmp_g16_board() : apple_pmp_j713_board()) {
 		/* Both consumers must name the exact boot-profile node. */
 		if ((kind != PMP_POWER_AGX && kind != PMP_POWER_DISP) || !consumer->of_node ||
 		    !of_device_is_compatible(consumer->of_node,
@@ -414,7 +414,7 @@ EXPORT_SYMBOL_GPL(apple_pmp_j713_display_prepare);
 
 int apple_pmp_j713_gpu_prepare(struct device *consumer)
 {
-	return apple_pmp_j713_board() ? pmp_power_prepare(consumer, PMP_POWER_AGX) : -ENODEV;
+	return apple_pmp_g16_board() ? pmp_power_prepare(consumer, PMP_POWER_AGX) : -ENODEV;
 }
 EXPORT_SYMBOL_GPL(apple_pmp_j713_gpu_prepare);
 
@@ -426,7 +426,7 @@ EXPORT_SYMBOL_GPL(apple_pmp_j713_display_check);
 
 int apple_pmp_j713_gpu_check(struct device *consumer)
 {
-	return apple_pmp_j713_board() ? pmp_power_check(consumer, PMP_POWER_AGX) : -ENODEV;
+	return apple_pmp_g16_board() ? pmp_power_check(consumer, PMP_POWER_AGX) : -ENODEV;
 }
 EXPORT_SYMBOL_GPL(apple_pmp_j713_gpu_check);
 
@@ -438,6 +438,6 @@ EXPORT_SYMBOL_GPL(apple_pmp_j713_display_get);
 
 int apple_pmp_j713_gpu_get(struct device *consumer)
 {
-	return apple_pmp_j713_board() ? pmp_power_get(consumer, PMP_POWER_AGX) : -ENODEV;
+	return apple_pmp_g16_board() ? pmp_power_get(consumer, PMP_POWER_AGX) : -ENODEV;
 }
 EXPORT_SYMBOL_GPL(apple_pmp_j713_gpu_get);

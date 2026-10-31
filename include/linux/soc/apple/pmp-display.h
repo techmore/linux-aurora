@@ -12,6 +12,18 @@ static inline bool apple_pmp_j713_board(void)
 	       of_machine_is_compatible("apple,t8132");
 }
 
+/*
+ * T8132 boards whose G16 GPU votes power through the retained PMP. J773g
+ * carries the same PMP table shape and GPU handoff as J713. Display votes
+ * stay J713-only.
+ */
+static inline bool apple_pmp_g16_board(void)
+{
+	return (of_machine_is_compatible("apple,j713") ||
+		of_machine_is_compatible("apple,j773g")) &&
+	       of_machine_is_compatible("apple,t8132");
+}
+
 struct device;
 struct apple_pmp_display;
 

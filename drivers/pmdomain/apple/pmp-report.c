@@ -345,7 +345,8 @@ int apple_pmp_report_wait_supplier_ready(struct device *supplier, unsigned int t
 	struct platform_device *pdev;
 	struct apple_pmp_report *rep;
 	u64 status;
-	bool t8132 = of_machine_is_compatible("apple,j713") &&
+	bool t8132 = (of_machine_is_compatible("apple,j713") ||
+		      of_machine_is_compatible("apple,j773g")) &&
 		of_device_is_compatible(supplier->of_node, "apple,t8132-pmp-v2");
 	int ret;
 
