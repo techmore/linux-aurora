@@ -29,7 +29,9 @@
 		bluetooth0 = &bluetooth0;
 		ethernet0 = &ethernet0;
 		pmp = &pmp;
+		pmu-primary = &pmic1;
 		sart-ans = &sart;
+		spmi-primary = &nub_spmi;
 		wifi0 = &wifi0;
 	};
 
@@ -486,6 +488,57 @@
 
 &smc_mbox {
 	status = "okay";
+};
+
+/*
+ * Primary PMU (Abbey), J773g ADT /arm-io/nub-spmi0/pmu-main: compatible
+ * "pmu,spmi", "pmu,abbey", is-primary = 1, reg = 0xe, info-rtc_scrpad =
+ * 0x2100, info-leg_scrpad = 0xf800. That is the same PMU and scratchpad
+ * layout as the J713, so the NVMEM cells below are the J713 ones.
+ *
+ * m1n1 only transfers the SPMI range and slave ID for the J713, so the
+ * values from the J773g ADT are written here (nub-spmi0 reg[0] =
+ * 0x188714000, size 0x4000; the ADT's 0x1xxxxxxxx maps to 0x3xxxxxxxx
+ * as for the SMC). The aliases above let a loader that does transfer
+ * them on J773g overwrite these with the same values.
+ */
+&nub_spmi {
+	reg = <0x3 0x88714000 0x0 0x4000>;
+	status = "okay";
+
+	pmic1: pmic@e {
+		compatible = "apple,abbey-pmic", "apple,spmi-nvmem";
+		reg = <0xe SPMI_USID>;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			rtc_offset: rtc-offset@2100 {
+				reg = <0x2100 0x6>;
+			};
+
+			boot_stage: boot-stage@f801 {
+				reg = <0xf801 0x1>;
+			};
+
+			boot_error_count: boot-error-count@f802,0 {
+				reg = <0xf802 0x1>;
+				bits = <0 4>;
+			};
+
+			panic_count: panic-count@f802,4 {
+				reg = <0xf802 0x1>;
+				bits = <4 4>;
+			};
+
+			shutdown_flag: shutdown-flag@f80f,3 {
+				reg = <0xf80f 0x1>;
+				bits = <3 1>;
+			};
+		};
+	};
 };
 
 #include "hwmon-common.dtsi"
