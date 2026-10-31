@@ -484,6 +484,20 @@
 	smc_hwmon: hwmon {
 		compatible = "apple,smc-hwmon";
 	};
+
+	/*
+	 * Poweroff and restart go through SMC key MBSE (J773g ADT pmu-main
+	 * function-external_standby = keyW('MBSE')). shutdown_flag (PMU boot
+	 * key 0xf bit 3, as on J713 and t8103/t8122) keeps the PMU off after
+	 * 'off1'; without it an M6 mini was seen to restart instead.
+	 */
+	smc_reboot: reboot {
+		compatible = "apple,t8132-smc-reboot", "apple,smc-reboot";
+		nvmem-cells = <&shutdown_flag>, <&boot_stage>,
+			<&boot_error_count>, <&panic_count>;
+		nvmem-cell-names = "shutdown_flag", "boot_stage",
+			"boot_error_count", "panic_count";
+	};
 };
 
 &smc_mbox {
