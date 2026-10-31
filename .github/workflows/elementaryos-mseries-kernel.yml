@@ -28,7 +28,9 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    # Repo variable KERNEL_RUNNER selects a self-hosted runner, e.g. ["self-hosted","linux","arm64","m1pro"];
+    # without it the job uses GitHub's 4-core Ubuntu 26.04 arm64 runner.
+    runs-on: ${{ fromJSON(vars.KERNEL_RUNNER || '"ubuntu-26.04-arm"') }}
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +39,15 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          if [ "${{ runner.environment }}" != "github-hosted" ]; then
+            # Self-hosted: the owner installs the packages once (see the runner notes); only make sure
+            # the Rust toolchain and bindgen versions are present.
+            command -v rustup >/dev/null || curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST"
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            "$HOME/.cargo/bin/rustup" toolchain install "$RUST" --profile minimal -c rust-src -c rustfmt
+            "$HOME/.cargo/bin/bindgen" --version 2>/dev/null | grep -q " $BINDGEN" || "$HOME/.cargo/bin/cargo" install --locked bindgen-cli --version "$BINDGEN"
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bc bison flex cpio dwarves \
             device-tree-compiler kmod libelf-dev libssl-dev python3 clang lld llvm libclang-dev ccache
