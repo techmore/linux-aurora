@@ -3911,7 +3911,7 @@ static int apple_dart_probe(struct platform_device *pdev)
 	bool tunneled = dev->of_node->parent &&
 			 of_node_name_prefix(dev->of_node->parent,
 					     "usb4-pcie-tunnel-");
-	bool j713_display, j713_radio;
+	bool j713_display, j713_radio, j773g_display;
 
 	/*
 	 * The J713 internal display DARTs are live: DCP firmware (SID23) and
@@ -3927,6 +3927,13 @@ static int apple_dart_probe(struct platform_device *pdev)
 		of_machine_is_compatible("apple,t8132") &&
 		of_device_is_compatible(dev->of_node, "apple,t8132-dart") &&
 		res->start == 0x490000000ULL;
+	/*
+	 * The J773g HDMI pipe's DARTs (dart-dispext0, dart-dcpext0), which the
+	 * boot loader hands over locked with the running dcpext0's mappings.
+	 */
+	j773g_display = res && !tunneled && of_machine_is_compatible("apple,j773g") &&
+		of_device_is_compatible(dev->of_node, "apple,t8132-dart") &&
+		(res->start == 0x286300000ULL || res->start == 0x286340000ULL);
 	if (j713_display && !IS_ENABLED(CONFIG_APPLE_DART_J713_DCP))
 		return dev_err_probe(dev, -EOPNOTSUPP,
 				     "retained J713 display requires CONFIG_APPLE_DART_J713_DCP=y\n");
@@ -4211,9 +4218,19 @@ params_done:
 	dart->fw_handoff = apple_dart_fw_handoff_enabled(dart);
 	/* Preserve our retained-root path when no reserved-table handoff exists. */
 	dart->fw_mirror = dart->locked && !dart->fw_handoff &&
-		(of_device_is_compatible(dev->of_node, "apple,t6041-dart") ||
+		(j773g_display ||
+		 of_device_is_compatible(dev->of_node, "apple,t6041-dart") ||
 		 of_device_is_compatible(dev->of_node, "apple,t8140-dart") ||
 		 of_device_is_compatible(dev->of_node, "apple,t8142-dart"));
+	/*
+	 * Unlocked, the reset below would tear down the running dcpext0's
+	 * mappings and the boot framebuffer's scanout: leave such a DART alone.
+	 */
+	if (j773g_display && !dart->locked) {
+		ret = dev_err_probe(dev, -ENODEV,
+				    "J773g display DART not handed over locked; leaving it untouched\n");
+		goto err_clk_disable;
+	}
 	if (of_machine_is_compatible("apple,j713") &&
 	    of_machine_is_compatible("apple,t8132") &&
 	    res->start == 0x394800000ULL && dart->hw->type == DART_T8110 &&
