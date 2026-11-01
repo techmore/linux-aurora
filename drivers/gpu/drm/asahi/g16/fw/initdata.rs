@@ -85,6 +85,20 @@ pub(crate) mod globals {
 pub(crate) mod hwdata {
     pub(crate) const SIZE: usize = super::OBJECT_SIZE[super::id::MAIN];
 }
+/// MTR (GPU temperature sensor) alarm masks in PowerPerformance, read from the
+/// G16 firmware's agfMTRAlarmHandler on a J773g (mBoot-18000.161.10). Not
+/// qualified on the 25G83 layout; the encoder leaves them zero.
+pub(crate) mod power_performance {
+    /// Sensors whose alarm the firmware arms (0x1000000 at MTR 0x1004 + i * 0x200)
+    /// and handles as fast-die.
+    pub(crate) const MTR_FAST_DIE: usize = 0x2268;
+    /// Second fast-die mask, shifted by the word at 0x2f14.
+    pub(crate) const MTR_FAST_DIE_SHIFTED: usize = 0x2f08;
+    /// Sensors an MTR alarm interrupt is matched against. With none set, any
+    /// alarm ends in "Received MTR Alarm interrupt from GPU but no match found".
+    pub(crate) const MTR_ALARM: usize = 0x3b58;
+    const _: () = assert!(MTR_ALARM + 4 <= super::OBJECT_SIZE[super::id::POWER_PERFORMANCE]);
+}
 
 /// One logical loader record, including its page offset and exact PTE class.
 #[derive(Clone, Copy, Debug)]

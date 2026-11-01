@@ -141,5 +141,17 @@ module! {
             default: 1,
             description: "G16: validate CDM/VDM stream records",
         },
+        g16_mtr_alarm_mask: u32 {
+            default: 0,
+            description: "G16, unqualified: MTR alarm sensor mask (PowerPerformance+0x3b58)",
+        },
+        g16_mtr_fast_die_mask: u32 {
+            default: 0,
+            description: "G16, unqualified: MTR fast-die mask (PowerPerformance+0x2268)",
+        },
+        g16_mtr_fast_die_shifted_mask: u32 {
+            default: 0,
+            description: "G16, unqualified: shifted MTR fast-die mask (+0x2f08)",
+        },
     },
 }

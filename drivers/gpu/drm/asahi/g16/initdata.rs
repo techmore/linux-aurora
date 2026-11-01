@@ -10,9 +10,10 @@ use kernel::{device, prelude::*, sync::Arc};
 use super::adt::GpuAdt;
 use super::board;
 use super::channel::{Channels, Ring};
-use super::fw::initdata::{self as wire, control, globals, id, ready_control};
+use super::fw::initdata::{self as wire, control, globals, id, power_performance, ready_control};
 use super::hw;
 use super::object::{Class, FwObject, Objects, Placement, Request};
+use super::params;
 
 /// Firmware graph handles. The small root.Control and large FirmwareData are
 /// intentionally separate: only the former carries the READY acknowledgement.
@@ -191,6 +192,27 @@ pub(crate) fn build(
     // published selectors remain S1 until the thermal owner admits a raise.
     for at in globals::PSTATE_SELECTORS {
         images[id::GLOBALS][at..at + 4].copy_from_slice(&100u32.to_le_bytes());
+    }
+    // Unqualified, off by default: the MTR (GPU temperature sensor) masks the
+    // firmware matches and arms PMP-raised alarms against. Zero keeps the
+    // qualified bytes; see g16/params.rs.
+    for (at, mask) in [
+        (power_performance::MTR_FAST_DIE, params::mtr_fast_die_mask()),
+        (
+            power_performance::MTR_FAST_DIE_SHIFTED,
+            params::mtr_fast_die_shifted_mask(),
+        ),
+        (power_performance::MTR_ALARM, params::mtr_alarm_mask()),
+    ] {
+        if mask != 0 {
+            images[id::POWER_PERFORMANCE][at..at + 4].copy_from_slice(&mask.to_le_bytes());
+            dev_info!(
+                dev,
+                "M4 initdata: unqualified MTR mask {:#x} at PowerPerformance+{:#x}\n",
+                mask,
+                at
+            );
+        }
     }
     for i in 0..wire::OBJECT_COUNT {
         graph[i].write(0, &images[i])?;

@@ -48,6 +48,21 @@ pub(crate) fn stream_gate() -> bool {
     *module_parameters::g16_stream_gate.value() != 0
 }
 
+/// MTR alarm sensor mask for PowerPerformance+0x3b58 (0 leaves it zero). Unqualified.
+pub(crate) fn mtr_alarm_mask() -> u32 {
+    *module_parameters::g16_mtr_alarm_mask.value()
+}
+
+/// MTR fast-die mask for PowerPerformance+0x2268 (0 leaves it zero). Unqualified.
+pub(crate) fn mtr_fast_die_mask() -> u32 {
+    *module_parameters::g16_mtr_fast_die_mask.value()
+}
+
+/// Shifted MTR fast-die mask for PowerPerformance+0x2f08 (0 leaves it zero). Unqualified.
+pub(crate) fn mtr_fast_die_shifted_mask() -> u32 {
+    *module_parameters::g16_mtr_fast_die_shifted_mask.value()
+}
+
 /// Fragment-only dependency publication has not been qualified on this backend.
 pub(crate) fn early_tiling() -> bool {
     false
