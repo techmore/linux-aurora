@@ -513,6 +513,10 @@
 				gpio-controller;
 				#gpio-cells = <2>;
 			};
+
+			smc_hwmon: hwmon {
+				compatible = "apple,smc-hwmon";
+			};
 		};
 
 		ans_mbox: mailbox@481608000 {
