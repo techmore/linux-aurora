@@ -494,6 +494,11 @@ struct PmpHwConfig {
 
 const HW_CFG_DEFAULT: PmpHwConfig = PmpHwConfig { dma_mask: None };
 
+/// T8132: the PMP DART's DMA window starts at 1 TiB, as on T8140.
+const HW_CFG_T8132: PmpHwConfig = PmpHwConfig {
+    dma_mask: Some(DmaMask::new::<42>()),
+};
+
 /// T8140: the DART translates 42 bits and its DMA window starts at 1 TiB.
 const HW_CFG_T8140: PmpHwConfig = PmpHwConfig {
     dma_mask: Some(DmaMask::new::<42>()),
@@ -511,6 +516,7 @@ kernel::of_device_table!(
     MODULE_OF_TABLE,
     <PmpDriver as platform::Driver>::IdInfo,
     [
+        (of::DeviceId::new(c"apple,t8132-pmp-v2"), &HW_CFG_T8132),
         (of::DeviceId::new(c"apple,t8140-pmp-v2"), &HW_CFG_T8140),
         (of::DeviceId::new(c"apple,t6000-pmp-v2"), &HW_CFG_DEFAULT),
     ]
