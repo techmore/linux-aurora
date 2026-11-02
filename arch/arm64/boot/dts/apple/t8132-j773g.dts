@@ -177,3 +177,68 @@
 		local-mac-address = [00 10 18 00 00 00];
 	};
 };
+
+/* CPU frequency scaling */
+
+&cpufreq_e {
+	status = "okay";
+};
+
+&cpufreq_p {
+	status = "okay";
+};
+
+&cpu_e0 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_e1 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_e2 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_e3 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_e4 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_e5 {
+	operating-points-v2 = <&donan_e_opp>;
+	performance-domains = <&cpufreq_e>;
+};
+
+&cpu_p0 {
+	operating-points-v2 = <&donan_p_opp>;
+	performance-domains = <&cpufreq_p>;
+};
+
+&cpu_p1 {
+	operating-points-v2 = <&donan_p_opp>;
+	performance-domains = <&cpufreq_p>;
+};
+
+&cpu_p2 {
+	operating-points-v2 = <&donan_p_opp>;
+	performance-domains = <&cpufreq_p>;
+};
+
+&cpu_p3 {
+	operating-points-v2 = <&donan_p_opp>;
+	performance-domains = <&cpufreq_p>;
+};
+
+/* SMC sensors and the fan */
+
+#include "hwmon-common.dtsi"
+#include "hwmon-mini.dtsi"
