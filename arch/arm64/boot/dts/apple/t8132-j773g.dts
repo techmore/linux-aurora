@@ -19,6 +19,7 @@
 	aliases {
 		bluetooth0 = &bluetooth0;
 		ethernet0 = &ethernet0;
+		pmp = &pmp;
 		wifi0 = &wifi0;
 	};
 };
@@ -249,3 +250,167 @@
 
 #include "hwmon-common.dtsi"
 #include "hwmon-mini.dtsi"
+
+&pmp_dart {
+	status = "okay";
+};
+
+&pmp_mbox {
+	status = "okay";
+};
+
+/*
+ * The requests GravityLinux's J773g tree holds while the PMP runs;
+ * pmp-boot-f and pmp-boot-10 are the start-up requests macOS asserts
+ * before it starts the PMP. The PMP node itself stays disabled here: the
+ * bootloader copies the board and DRAM identifiers and the PMP tunables
+ * from the Apple device tree, then enables it.
+ */
+&pmp_report {
+	status = "okay";
+
+	report@7 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x7>;
+		label = "pmp-disp";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@f {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0xf>;
+		label = "pmp-boot-f";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@10 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x10>;
+		label = "pmp-boot-10";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@11 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x11>;
+		label = "pmp-dispext1";
+		#power-domain-cells = <0>;
+		power-domains = <&ps_dispext1_sys>;
+		apple,always-on;
+	};
+
+	report@12 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x12>;
+		label = "pmp-atc0-common";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@13 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x13>;
+		label = "pmp-atc1";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@14 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x14>;
+		label = "pmp-atc2";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@15 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x15>;
+		label = "pmp-atc3-common";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@16 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x16>;
+		label = "pmp-soc-ni0";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@17 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x17>;
+		label = "pmp-soc-ni1";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@18 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x18>;
+		label = "pmp-boot-18";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@19 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x19>;
+		label = "pmp-soc-ni3";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@1a {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x1a>;
+		label = "pmp-soc-ni4";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@1b {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x1b>;
+		label = "pmp-soc-ni5";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@1d {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x1d>;
+		label = "pmp-ans";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@1e {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x1e>;
+		label = "pmp-pcie";
+		#power-domain-cells = <0>;
+		apple,always-on;
+	};
+
+	report@22 {
+		compatible = "apple,t8140-pmp-v2-report-entry";
+		reg = <0x22>;
+		label = "pmp-sio";
+		#power-domain-cells = <0>;
+	};
+};
+
+/*
+ * Without votes the PMP parks DRAM low. CLPC votes DCS 5 / fabric 3
+ * through the AP's agent while a CPU cluster is busy or the GPU is
+ * powered.
+ */
+&pmc {
+	status = "okay";
+};
