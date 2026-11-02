@@ -507,9 +507,15 @@
 
 		nvme: nvme@4c5cc0000 {
 			compatible = "apple,t8132-nvme-ans2";
-			reg = <0x4 0xc5cc0000 0x0 0x60000>,
-			      <0x4 0x81600000 0x0 0x4000>;
-			reg-names = "nvme", "ans";
+			/*
+			 * ADT reg[9] is the controller window and reg[3] the
+			 * NVMMU; the linear submission queue registers end at
+			 * +0x24910 of the controller window.
+			 */
+			reg = <0x4 0xc5cc0000 0x0 0x28000>,
+			      <0x4 0x81600000 0x0 0x4000>,
+			      <0x4 0x85cc0000 0x0 0x60000>;
+			reg-names = "nvme", "ans", "nvmmu";
 
 			interrupt-parent = <&aic>;
 			interrupts = <AIC_IRQ 1018 IRQ_TYPE_LEVEL_HIGH>;
